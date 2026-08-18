@@ -1,4 +1,4 @@
-module github.com/kota/sen
+module github.com/yashikota/sen
 
 go 1.26.0
 
