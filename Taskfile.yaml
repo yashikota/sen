@@ -37,19 +37,19 @@ tasks:
     desc: "Format, lint, and typecheck the SPA"
     dir: web
     cmds:
-      - vp check --fix
+      - pnpm exec vp check --fix
 
   web:test:
     desc: "SPA unit tests"
     dir: web
     cmds:
-      - vp test
+      - pnpm exec vp test
 
   web:build:
     desc: "Build the SPA"
     dir: web
     cmds:
-      - vp build
+      - pnpm exec vp build
       - rm -rf ../internal/webembed/dist
       - mkdir -p ../internal/webembed/dist
       - cp -a dist/. ../internal/webembed/dist/
