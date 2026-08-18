@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kota/sen/internal/domain"
+	"github.com/yashikota/sen/internal/domain"
 	"github.com/pelletier/go-toml/v2"
 )
 

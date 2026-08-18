@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/kota/sen/internal/store"
+	"github.com/yashikota/sen/internal/store"
 )
 
 type Server struct {

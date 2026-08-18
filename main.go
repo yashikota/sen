@@ -8,7 +8,7 @@ import (
 	"os"
 	"runtime/debug"
 
-	"github.com/kota/sen/internal/cli"
+	"github.com/yashikota/sen/internal/cli"
 )
 
 var Version string

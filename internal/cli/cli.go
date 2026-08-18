@@ -10,11 +10,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/kota/sen/internal/appdir"
-	"github.com/kota/sen/internal/httpapi"
-	"github.com/kota/sen/internal/store"
-	"github.com/kota/sen/internal/syncer"
-	"github.com/kota/sen/internal/webembed"
+	"github.com/yashikota/sen/internal/appdir"
+	"github.com/yashikota/sen/internal/httpapi"
+	"github.com/yashikota/sen/internal/store"
+	"github.com/yashikota/sen/internal/syncer"
+	"github.com/yashikota/sen/internal/webembed"
 )
 
 var ErrUsage = errors.New("usage")

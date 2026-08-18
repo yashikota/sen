@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kota/sen/internal/store"
+	"github.com/yashikota/sen/internal/store"
 )
 
 func TestExportWritesFrontmatter(t *testing.T) {

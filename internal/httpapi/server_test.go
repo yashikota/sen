@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kota/sen/internal/store"
+	"github.com/yashikota/sen/internal/store"
 )
 
 func testAPI(t *testing.T) *Server {

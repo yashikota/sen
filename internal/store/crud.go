@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kota/sen/internal/domain"
+	"github.com/yashikota/sen/internal/domain"
 )
 
 func (s *Store) Workspace() (Workspace, error) {

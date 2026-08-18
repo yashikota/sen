@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kota/sen/internal/domain"
-	"github.com/kota/sen/internal/store"
+	"github.com/yashikota/sen/internal/domain"
+	"github.com/yashikota/sen/internal/store"
 )
 
 var ErrDirty = errors.New("local workspace has unpushed changes")
