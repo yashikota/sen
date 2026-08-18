@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/yashikota/sen/internal/domain"
 	"github.com/pelletier/go-toml/v2"
+	"github.com/yashikota/sen/internal/domain"
 )
 
 type issueFM struct {
