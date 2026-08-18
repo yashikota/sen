@@ -1,0 +1,66 @@
+version: "3"
+
+tasks:
+  default:
+    desc: "Display this help message"
+    cmds:
+      - task -l
+
+  lint:
+    desc: "Lint"
+    cmds:
+      - golangci-lint run --fix
+      - golangci-lint fmt
+
+  test:
+    desc: "Run all tests"
+    deps: [test:unit]
+
+  test:unit:
+    desc: "Unit test"
+    cmds:
+      - go test -v -shuffle=on -race ./...
+
+  test:scenario:
+    desc: "API scenario tests"
+    cmds:
+      - go test -v -shuffle=on -race ./internal/httpapi -run Scenario
+
+  check:
+    desc: "Lint and test"
+    cmds:
+      - task: lint
+      - task: test
+      - task: web:check
+
+  web:check:
+    desc: "Format, lint, and typecheck the SPA"
+    dir: web
+    cmds:
+      - vp check --fix
+
+  web:test:
+    desc: "SPA unit tests"
+    dir: web
+    cmds:
+      - vp test
+
+  web:build:
+    desc: "Build the SPA"
+    dir: web
+    cmds:
+      - vp build
+      - rm -rf ../internal/webembed/dist
+      - mkdir -p ../internal/webembed/dist
+      - cp -a dist/. ../internal/webembed/dist/
+
+  build:
+    desc: "Build sen with embedded SPA"
+    deps: [web:build]
+    cmds:
+      - go build -o sen .
+
+  serve:
+    desc: "Run sen serve"
+    cmds:
+      - go run . serve
