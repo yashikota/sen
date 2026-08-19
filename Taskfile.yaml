@@ -64,3 +64,13 @@ tasks:
     desc: "Run sen serve"
     cmds:
       - go run . serve
+
+  web:dev:
+    desc: "Vite dev server (proxies /api to 127.0.0.1:7730)"
+    dir: web
+    cmds:
+      - pnpm exec vp dev
+
+  dev:
+    desc: "Run API and SPA dev servers in parallel"
+    deps: [serve, web:dev]
