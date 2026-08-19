@@ -2,11 +2,12 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"runtime/debug"
+
+	urfavecli "github.com/urfave/cli/v3"
 
 	"github.com/yashikota/sen/internal/cli"
 )
@@ -16,13 +17,15 @@ var Version string
 func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{})))
 
-	err := cli.Run(context.Background(), os.Args[1:], os.Stdout, os.Stderr, getVersion())
+	err := cli.Run(context.Background(), os.Args, os.Stdout, os.Stderr, getVersion())
 	if err == nil {
 		return
 	}
-	if errors.Is(err, cli.ErrUsage) {
-		fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(2)
+	if ec, ok := err.(urfavecli.ExitCoder); ok {
+		if msg := err.Error(); msg != "" {
+			fmt.Fprintln(os.Stderr, msg)
+		}
+		os.Exit(ec.ExitCode())
 	}
 	slog.Error("command failed", "err", err)
 	os.Exit(1)

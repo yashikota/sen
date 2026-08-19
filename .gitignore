@@ -1,4 +1,5 @@
 /sen
+.sen/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal

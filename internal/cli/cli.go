@@ -3,12 +3,13 @@ package cli
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"time"
+
+	urfavecli "github.com/urfave/cli/v3"
 
 	"github.com/yashikota/sen/internal/appdir"
 	"github.com/yashikota/sen/internal/httpapi"
@@ -17,35 +18,105 @@ import (
 	"github.com/yashikota/sen/internal/webembed"
 )
 
-var ErrUsage = errors.New("usage")
+func Run(ctx context.Context, osArgs []string, stdout, stderr io.Writer, version string) error {
+	if len(osArgs) == 0 {
+		osArgs = []string{"sen"}
+	} else if osArgs[0] != "sen" {
+		osArgs = append([]string{"sen"}, osArgs...)
+	}
 
-func Run(ctx context.Context, args []string, stdout, stderr io.Writer, version string) error {
-	if len(args) == 0 {
-		return usage()
+	prevPrinter := urfavecli.VersionPrinter
+	urfavecli.VersionPrinter = func(c *urfavecli.Command) {
+		fmt.Fprintln(c.Root().Writer, c.Version)
 	}
-	switch args[0] {
-	case "init":
-		return cmdInit(stdout)
-	case "serve":
-		return cmdServe(ctx, args[1:], stderr)
-	case "push":
-		return cmdPush(ctx, stdout, version)
-	case "pull":
-		return cmdPull(ctx, args[1:], stdout, stderr)
-	case "status":
-		return cmdStatus(stdout)
-	case "check":
-		return cmdCheck(stdout)
-	case "version", "-v", "--version":
-		fmt.Fprintln(stdout, version)
-		return nil
-	default:
-		return usage()
-	}
+	defer func() { urfavecli.VersionPrinter = prevPrinter }()
+
+	root := newRootCommand(stdout, stderr, version)
+	root.ExitErrHandler = func(_ context.Context, _ *urfavecli.Command, _ error) {}
+	return root.Run(ctx, osArgs)
 }
 
-func usage() error {
-	return fmt.Errorf("%w: sen <init|serve|push|pull|status|check|version>", ErrUsage)
+func newRootCommand(stdout, stderr io.Writer, version string) *urfavecli.Command {
+	return &urfavecli.Command{
+		Name:           "sen",
+		Usage:          "local-first issue tracker",
+		Description:    "Workspace defaults to ./.sen (override with SEN_HOME).",
+		Writer:         stdout,
+		ErrWriter:      stderr,
+		Version:        version,
+		DefaultCommand: "help",
+		ExtraInfo: func() map[string]string {
+			return map[string]string{
+				"Development (Task)": "task dev   API + Vite dev server",
+			}
+		},
+		Commands: []*urfavecli.Command{
+			{
+				Name:  "init",
+				Usage: "create .sen/ in the current directory",
+				Action: func(_ context.Context, _ *urfavecli.Command) error {
+					return cmdInit(stdout)
+				},
+			},
+			{
+				Name:  "serve",
+				Usage: "JSON API and UI on 127.0.0.1:7730",
+				Flags: []urfavecli.Flag{
+					&urfavecli.StringFlag{
+						Name:  "addr",
+						Value: "127.0.0.1:7730",
+						Usage: "listen address",
+					},
+				},
+				Action: func(ctx context.Context, c *urfavecli.Command) error {
+					return cmdServe(ctx, c.String("addr"), c.ErrWriter)
+				},
+			},
+			{
+				Name:  "push",
+				Usage: "snapshot workspace to GHCR",
+				Action: func(ctx context.Context, _ *urfavecli.Command) error {
+					return cmdPush(ctx, stdout, version)
+				},
+			},
+			{
+				Name:  "pull",
+				Usage: "restore workspace from GHCR",
+				Flags: []urfavecli.Flag{
+					&urfavecli.StringFlag{
+						Name:  "tag",
+						Value: "latest",
+						Usage: "artifact tag",
+					},
+				},
+				Action: func(ctx context.Context, c *urfavecli.Command) error {
+					return cmdPull(ctx, c.String("tag"), stdout, c.ErrWriter)
+				},
+			},
+			{
+				Name:  "status",
+				Usage: "show path, dirty state, last digest",
+				Action: func(_ context.Context, _ *urfavecli.Command) error {
+					return cmdStatus(stdout)
+				},
+			},
+			{
+				Name:  "check",
+				Usage: "list semantic file issues",
+				Action: func(_ context.Context, _ *urfavecli.Command) error {
+					return cmdCheck(stdout)
+				},
+			},
+			{
+				Name:  "version",
+				Usage: "print build version",
+				Action: func(_ context.Context, c *urfavecli.Command) error {
+					fmt.Fprintln(c.Root().Writer, version)
+					return nil
+				},
+			},
+		},
+	}
 }
 
 func openStore() (*store.Store, error) {
@@ -80,13 +151,7 @@ func cmdInit(stdout io.Writer) error {
 	return nil
 }
 
-func cmdServe(ctx context.Context, args []string, stderr io.Writer) error {
-	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	addr := fs.String("addr", "127.0.0.1:7730", "listen address")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
+func cmdServe(ctx context.Context, addr string, stderr io.Writer) error {
 	st, err := openStore()
 	if err != nil {
 		return err
@@ -94,12 +159,12 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer) error {
 	defer func() { _ = st.Close() }()
 	h := httpapi.New(st, webembed.Dist())
 	srv := &http.Server{
-		Addr:              *addr,
+		Addr:              addr,
 		Handler:           h,
 		ReadHeaderTimeout: 5 * time.Second,
 		BaseContext:       func(net.Listener) context.Context { return ctx },
 	}
-	ln, err := net.Listen("tcp", *addr)
+	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
 	}
@@ -148,13 +213,7 @@ func cmdPush(ctx context.Context, stdout io.Writer, version string) error {
 	return nil
 }
 
-func cmdPull(ctx context.Context, args []string, stdout, stderr io.Writer) error {
-	fs := flag.NewFlagSet("pull", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	tag := fs.String("tag", "latest", "artifact tag")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
+func cmdPull(ctx context.Context, tag string, stdout, stderr io.Writer) error {
 	st, err := openStore()
 	if err != nil {
 		return err
@@ -166,11 +225,11 @@ func cmdPull(ctx context.Context, args []string, stdout, stderr io.Writer) error
 		_ = st.Close()
 		return err
 	}
-	if err := svc.Pull(ctx, *tag); err != nil {
+	if err := svc.Pull(ctx, tag); err != nil {
 		_ = st.Close()
 		return err
 	}
-	fmt.Fprintf(stdout, "pulled %s into %s\n", *tag, st.Path())
+	fmt.Fprintf(stdout, "pulled %s into %s\n", tag, st.Path())
 	return nil
 }
 

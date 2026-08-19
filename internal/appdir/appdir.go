@@ -5,20 +5,17 @@ import (
 	"path/filepath"
 )
 
+const DefaultDir = ".sen"
+
 func Home() (string, error) {
 	if v := os.Getenv("SEN_HOME"); v != "" {
 		return filepath.Clean(v), nil
 	}
-
-	if xdg := os.Getenv("XDG_DATA_HOME"); xdg != "" {
-		return filepath.Join(xdg, "sen"), nil
-	}
-
-	home, err := os.UserHomeDir()
+	cwd, err := os.Getwd()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".local", "share", "sen"), nil
+	return filepath.Join(cwd, DefaultDir), nil
 }
 
 func Marker(root string) string {
