@@ -143,6 +143,30 @@ func load(root string) (*mem, error) {
 		return nil, err
 	}
 
+	if err := readTOMLDir(filepath.Join(root, "views"), func(name string, b []byte) error {
+		var v View
+		if err := toml.Unmarshal(b, &v); err != nil {
+			return err
+		}
+		stem := strings.TrimSuffix(name, ".toml")
+		if v.Slug != "" && v.Slug != stem {
+			m.diag("views/"+name, "slug_mismatch", fmt.Sprintf("slug %q does not match filename", v.Slug))
+		}
+		v.Slug = stem
+		if v.ID == 0 {
+			v.ID = m.nextID()
+		} else {
+			m.observeID(v.ID)
+		}
+		if v.Labels == nil {
+			v.Labels = []string{}
+		}
+		m.Views = append(m.Views, v)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
 	issueDir := filepath.Join(root, "issues")
 	ents, err := os.ReadDir(issueDir)
 	if err != nil && !os.IsNotExist(err) {
@@ -233,6 +257,9 @@ func save(root string, m *mem) error {
 	if err := os.MkdirAll(filepath.Join(root, "cycles"), 0o755); err != nil {
 		return err
 	}
+	if err := os.MkdirAll(filepath.Join(root, "views"), 0o755); err != nil {
+		return err
+	}
 
 	if err := writeTOML(filepath.Join(root, "workspace.toml"), m.Workspace); err != nil {
 		return err
@@ -267,6 +294,17 @@ func save(root string, m *mem) error {
 		return err
 	}
 	_ = pruneDir(filepath.Join(root, "cycles"), ".yaml", map[string]struct{}{})
+
+	wantViews := map[string]struct{}{}
+	for _, v := range m.Views {
+		wantViews[v.Slug+".toml"] = struct{}{}
+		if err := writeTOML(filepath.Join(root, "views", v.Slug+".toml"), v); err != nil {
+			return err
+		}
+	}
+	if err := pruneDir(filepath.Join(root, "views"), ".toml", wantViews); err != nil {
+		return err
+	}
 
 	wantIssues := map[string]struct{}{}
 	for _, iss := range m.Issues {
@@ -411,6 +449,12 @@ func fillIssueRefs(m *mem) {
 			if c, ok := cycleByNumber(m, *iss.CycleNumber); ok {
 				id := c.ID
 				iss.CycleID = &id
+			}
+		}
+		if iss.ParentIdentifier != nil && *iss.ParentIdentifier != "" {
+			if p, ok := issueByIdent(m, *iss.ParentIdentifier); ok {
+				id := p.ID
+				iss.ParentID = &id
 			}
 		}
 	}

@@ -12,9 +12,12 @@ export default defineConfig({
     singleQuote: true,
   },
   lint: {
-    ignorePatterns: ['dist/**'],
+    ignorePatterns: ['dist/**', 'e2e/**', 'playwright.config.ts'],
     jsPlugins: [{ name: 'vite-plus', specifier: 'vite-plus/oxlint-plugin' }],
     rules: { 'vite-plus/prefer-vite-plus-imports': 'error' },
     options: { typeAware: true, typeCheck: true },
+  },
+  test: {
+    exclude: ['e2e/**', 'node_modules/**', 'dist/**'],
   },
 });

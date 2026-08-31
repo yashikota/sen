@@ -137,6 +137,72 @@ func TestPageRejectsCycle(t *testing.T) {
 	}
 }
 
+func TestIssueParentRejectsCycle(t *testing.T) {
+	s := openTest(t)
+	a, err := s.CreateIssue(CreateIssueInput{Title: "parent"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.CreateIssue(CreateIssueInput{Title: "child", ParentID: &a.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.ParentIdentifier == nil || *b.ParentIdentifier != "SEN-1" {
+		t.Fatalf("parent identifier %#v", b.ParentIdentifier)
+	}
+	parentID := &b.ID
+	_, err = s.UpdateIssue("SEN-1", PatchIssueInput{ParentID: &parentID})
+	if !errors.Is(err, ErrValidation) {
+		t.Fatalf("want cycle validation, got %v", err)
+	}
+}
+
+func TestIssueParentWritesFrontmatter(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	parent, err := s.CreateIssue(CreateIssueInput{Title: "root"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, err := s.CreateIssue(CreateIssueInput{Title: "leaf", ParentID: &parent.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "issues", child.Identifier+".md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "parent =") || !strings.Contains(string(raw), "SEN-1") {
+		t.Fatalf("frontmatter: %s", raw)
+	}
+}
+
+func TestViewFiltersIssues(t *testing.T) {
+	s := openTest(t)
+	if _, err := s.CreateIssue(CreateIssueInput{Title: "open", Status: "todo"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateIssue(CreateIssueInput{Title: "closed", Status: "done"}); err != nil {
+		t.Fatal(err)
+	}
+	st := "todo"
+	v, err := s.CreateView(CreateViewInput{Name: "Open", Slug: "open", Display: "list", Status: &st})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.ListIssues(v.Filter())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Title != "open" {
+		t.Fatalf("got %#v", got)
+	}
+}
+
 func TestIssueWritesMarkdownFile(t *testing.T) {
 	dir := t.TempDir()
 	s, err := Open(dir)

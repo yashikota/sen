@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	urfavecli "github.com/urfave/cli/v3"
@@ -21,8 +22,13 @@ import (
 func Run(ctx context.Context, osArgs []string, stdout, stderr io.Writer, version string) error {
 	if len(osArgs) == 0 {
 		osArgs = []string{"sen"}
-	} else if osArgs[0] != "sen" {
-		osArgs = append([]string{"sen"}, osArgs...)
+	} else {
+		base := filepath.Base(osArgs[0])
+		if base == "sen" || base == "sen.exe" {
+			osArgs[0] = "sen"
+		} else {
+			osArgs = append([]string{"sen"}, osArgs...)
+		}
 	}
 
 	prevPrinter := urfavecli.VersionPrinter
@@ -39,8 +45,8 @@ func Run(ctx context.Context, osArgs []string, stdout, stderr io.Writer, version
 func newRootCommand(stdout, stderr io.Writer, version string) *urfavecli.Command {
 	return &urfavecli.Command{
 		Name:           "sen",
-		Usage:          "local-first issue tracker",
-		Description:    "Workspace defaults to ./.sen (override with SEN_HOME).",
+		Usage:          "personal local issue tracker",
+		Description:    "One-person workspace in ./.sen (override with SEN_HOME). No teams or assignees.",
 		Writer:         stdout,
 		ErrWriter:      stderr,
 		Version:        version,

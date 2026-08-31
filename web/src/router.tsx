@@ -14,7 +14,8 @@ import {
   ProjectDetailPage,
   ProjectsPage,
 } from './pages/ProjectsCycles.tsx';
-import { api } from './api.ts';
+import { ViewPage } from './pages/ViewsPages.tsx';
+import { api, issuesQuery, parseIssueSearch, searchToFilter, type IssueSearch } from './api.ts';
 
 function NotFoundPage() {
   return <div className="empty">Not found</div>;
@@ -22,6 +23,16 @@ function NotFoundPage() {
 
 function ErrorPage({ error }: { error: Error }) {
   return <div className="error">{error.message}</div>;
+}
+
+async function loadFilteredIssues(search: IssueSearch) {
+  const [issues, projects, cycles, labels] = await Promise.all([
+    api.issues(issuesQuery(searchToFilter(search))),
+    api.projects(),
+    api.cycles(),
+    api.labels(),
+  ]);
+  return { issues: issues ?? [], projects, cycles, labels };
 }
 
 const rootRoute = createRootRoute({
@@ -34,7 +45,7 @@ const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
   beforeLoad: () => {
-    throw redirect({ to: '/issues' });
+    throw redirect({ to: '/issues', search: {} });
   },
   component: () => <Outlet />,
 });
@@ -42,7 +53,9 @@ const indexRoute = createRoute({
 const issuesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/issues',
-  loader: () => api.issues(),
+  validateSearch: (raw: Record<string, unknown>) => parseIssueSearch(raw),
+  loaderDeps: ({ search }) => search,
+  loader: ({ deps }) => loadFilteredIssues(deps),
   component: IssuesPage,
 });
 
@@ -56,7 +69,9 @@ const issueRoute = createRoute({
 const boardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/board',
-  loader: () => api.issues(),
+  validateSearch: (raw: Record<string, unknown>) => parseIssueSearch(raw),
+  loaderDeps: ({ search }) => search,
+  loader: ({ deps }) => loadFilteredIssues(deps),
   component: BoardPage,
 });
 
@@ -97,6 +112,22 @@ const cycleRoute = createRoute({
   component: CycleDetailPage,
 });
 
+const viewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/views/$slug',
+  loader: async ({ params }) => {
+    const view = await api.view(params.slug);
+    const [issues, projects, cycles, labels] = await Promise.all([
+      api.issues(issuesQuery(view)),
+      api.projects(),
+      api.cycles(),
+      api.labels(),
+    ]);
+    return { view, issues, projects, cycles, labels };
+  },
+  component: ViewPage,
+});
+
 const pagesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/pages',
@@ -120,6 +151,7 @@ const routeTree = rootRoute.addChildren([
   projectRoute,
   cyclesRoute,
   cycleRoute,
+  viewRoute,
   pagesRoute,
   pageRoute,
 ]);

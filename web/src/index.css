@@ -105,6 +105,33 @@ nav {
   color: var(--text);
 }
 
+.nav-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-section > .muted {
+  padding: 4px 8px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.nav-add {
+  margin: 4px 8px 0;
+  justify-self: start;
+  width: fit-content;
+}
+
+.view-filters {
+  padding: 10px 12px 0;
+}
+
+.view-filters + .chips {
+  padding: 8px 12px 12px;
+}
+
 .workspace-card {
   margin-top: auto;
   padding: 8px;
@@ -169,11 +196,15 @@ nav {
 
 .row {
   display: grid;
-  grid-template-columns: 16px 72px 1fr auto;
+  grid-template-columns: 16px 72px minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
-  padding: 8px 12px;
+  padding: 6px 12px;
+  border: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: transparent;
+  text-align: left;
+  width: 100%;
   cursor: pointer;
 }
 
@@ -185,11 +216,34 @@ nav {
   width: 2px;
   height: 16px;
   border-radius: 1px;
-  background: transparent;
+  background: var(--border);
+}
+
+.row[data-status='todo'] .rail {
+  background: var(--medium);
+}
+
+.row[data-status='in_progress'] .rail {
+  background: var(--line);
+}
+
+.row[data-status='done'] .rail {
+  background: var(--low);
+}
+
+.row[data-status='canceled'] .rail {
+  background: var(--urgent);
+  opacity: 0.55;
 }
 
 .row.selected .rail {
   background: var(--line);
+}
+
+.row-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ident {
@@ -213,6 +267,121 @@ nav {
 .badge.urgent {
   color: var(--urgent);
   border-color: color-mix(in srgb, var(--urgent) 50%, var(--border));
+}
+
+.row-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pip {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  display: inline-block;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  border: 1px solid color-mix(in srgb, var(--chip, var(--border)) 55%, var(--border));
+  background: color-mix(in srgb, var(--chip, var(--border)) 16%, transparent);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.chip.on {
+  background: color-mix(in srgb, var(--chip, var(--line)) 28%, transparent);
+  box-shadow: inset 0 0 0 1px var(--chip, var(--line));
+}
+
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.seg button {
+  background: transparent;
+  border: 0;
+  padding: 3px 10px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.seg button.on {
+  background: var(--raised);
+  color: var(--text);
+}
+
+.md-field {
+  display: grid;
+  gap: 8px;
+}
+
+.md {
+  min-height: 180px;
+  line-height: 1.55;
+}
+
+.md h1,
+.md h2,
+.md h3 {
+  margin: 0 0 8px;
+  font-family: var(--display);
+}
+
+.md p,
+.md ul {
+  margin: 0 0 10px;
+}
+
+.md pre {
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.md a {
+  color: var(--line);
+  text-decoration: underline;
+}
+
+.diag {
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--urgent) 40%, var(--border));
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--urgent);
+  max-height: 120px;
+  overflow: auto;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .empty {
@@ -252,8 +421,78 @@ nav {
   gap: 8px;
 }
 
+.prop-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+}
+
+.prop-grid label,
+.dialog-fields label {
+  display: grid;
+  gap: 4px;
+}
+
+.prop-grid label > span,
+.dialog-fields label > span {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.ident-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ident-copy {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.toolbar select,
+.toolbar input,
+.toolbar-save input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+.toolbar-chips {
+  flex: 1 1 160px;
+}
+
+.toolbar-save {
+  margin-left: auto;
+}
+
+.toolbar-save input {
+  width: 160px;
+}
+
+.empty-inline {
+  color: var(--muted);
+  font-size: 12px;
+  padding: 4px 0 8px;
+}
+
 .props select,
 .props input,
+.prop-grid select,
+.prop-grid input,
 .field {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -293,12 +532,19 @@ nav {
   gap: 6px;
 }
 
+.column.droppable {
+  border-color: var(--line);
+}
+
 .column h2 {
   margin: 0;
   font-size: 12px;
   color: var(--muted);
   font-weight: 500;
   padding: 4px 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .card {
@@ -307,6 +553,21 @@ nav {
   border-radius: 8px;
   padding: 8px;
   cursor: pointer;
+  display: grid;
+  gap: 6px;
+  text-align: left;
+}
+
+.card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.card-title {
+  font-size: 13px;
+  line-height: 1.35;
 }
 
 .overlay {
@@ -337,6 +598,23 @@ nav {
   background: transparent;
   padding: 12px 14px;
   outline: none;
+}
+
+.dialog-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 0 14px 14px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.dialog-fields select {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
 }
 
 .palette-list {
@@ -374,8 +652,79 @@ nav {
   cursor: pointer;
 }
 
-.ghost:hover {
-  border-color: var(--line);
+.ghost.danger {
+  color: var(--urgent);
+  border-color: color-mix(in srgb, var(--urgent) 40%, var(--border));
+}
+
+.ghost.danger:hover {
+  border-color: var(--urgent);
+}
+
+.dirty {
+  color: var(--high);
+  font-size: 11px;
+}
+
+.crumb {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--line);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.nav-sub {
+  padding-left: 28px;
+  font-size: 12px;
+}
+
+.row.overdue .row-title,
+.card.overdue .card-title {
+  color: var(--urgent);
+}
+
+.help-dialog {
+  padding: 14px 16px 18px;
+}
+
+.help-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.help-head h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.help-list {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.help-row {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.help-row dd {
+  margin: 0;
+  color: var(--muted);
+}
+
+.palette-btn {
+  margin: 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .progress {

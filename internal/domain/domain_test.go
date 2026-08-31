@@ -3,6 +3,7 @@ package domain
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestIdentifierRoundTrip(t *testing.T) {
@@ -94,5 +95,113 @@ func TestValidSlug(t *testing.T) {
 	}
 	if ValidSlug("-x") || ValidSlug("X") || ValidSlug("") {
 		t.Fatal("expected invalid")
+	}
+}
+
+func TestValidators(t *testing.T) {
+	t.Parallel()
+	for _, s := range []string{"backlog", "todo", "in_progress", "done", "canceled"} {
+		if !ValidIssueStatus(s) {
+			t.Fatalf("issue status %q", s)
+		}
+	}
+	if ValidIssueStatus("ready") || ValidIssueStatus("") {
+		t.Fatal("invalid issue status accepted")
+	}
+	if !ValidPriority(0) || !ValidPriority(4) || ValidPriority(-1) || ValidPriority(5) {
+		t.Fatal("priority bounds")
+	}
+	for _, s := range []string{"planned", "started", "completed", "canceled"} {
+		if !ValidProjectStatus(s) {
+			t.Fatalf("project status %q", s)
+		}
+	}
+	if ValidProjectStatus("active") {
+		t.Fatal("project must not use cycle statuses")
+	}
+	for _, s := range []string{"upcoming", "active", "completed"} {
+		if !ValidCycleStatus(s) {
+			t.Fatalf("cycle status %q", s)
+		}
+	}
+	if ValidCycleStatus("planned") {
+		t.Fatal("cycle must not use project statuses")
+	}
+	for _, s := range []string{"proposed", "accepted", "deprecated", "superseded"} {
+		if !ValidPageStatus(s) {
+			t.Fatalf("page status %q", s)
+		}
+	}
+	if ValidPageStatus("draft") {
+		t.Fatal("draft is not a page status")
+	}
+	if !ValidViewDisplay("list") || !ValidViewDisplay("board") || ValidViewDisplay("table") {
+		t.Fatal("view display")
+	}
+}
+
+func TestParseIdentifierRejectsJunk(t *testing.T) {
+	t.Parallel()
+	for _, id := range []string{"", "SEN-", "SEN-abc", "ISSUE-1", "SEN-1a", "SEN--1"} {
+		if _, ok := ParseIdentifier(id); ok {
+			t.Fatalf("accepted %q", id)
+		}
+	}
+	n, ok := ParseIdentifier("SEN-01")
+	if !ok || n != 1 {
+		t.Fatalf("SEN-01: %d %v", n, ok)
+	}
+}
+
+func TestIsDirtyEmptyLastPush(t *testing.T) {
+	t.Parallel()
+	empty := ""
+	if IsDirty("2026-08-18T00:00:00Z", &empty, false) {
+		t.Fatal("empty last push without content is not dirty")
+	}
+	if !IsDirty("2026-08-18T00:00:00Z", &empty, true) {
+		t.Fatal("empty last push with content is dirty")
+	}
+}
+
+func TestUniqueSlugSkipsOccupiedSuffix(t *testing.T) {
+	t.Parallel()
+	used := map[string]struct{}{"adr": {}, "adr-2": {}}
+	if g := UniqueSlug(used, "adr"); g != "adr-3" {
+		t.Fatalf("got %q", g)
+	}
+}
+
+func TestRenderPageMarkdownQuotesAndParent(t *testing.T) {
+	t.Parallel()
+	parent := "root-adr"
+	md := RenderPageMarkdown(Page{
+		Title:      "Foo: bar",
+		Slug:       "foo-bar",
+		Body:       "line",
+		Status:     "accepted",
+		Tags:       nil,
+		ParentSlug: &parent,
+	})
+	if !strings.Contains(md, `title: "Foo: bar"`) {
+		t.Fatalf("quoted title missing: %s", md)
+	}
+	if !strings.Contains(md, "parent: root-adr\n") {
+		t.Fatalf("parent missing: %s", md)
+	}
+	if !strings.HasSuffix(md, "line\n") {
+		t.Fatalf("body newline: %q", md)
+	}
+}
+
+func TestNowIsRFC3339UTC(t *testing.T) {
+	t.Parallel()
+	got := Now()
+	parsed, err := time.Parse(time.RFC3339, got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.Location() != time.UTC {
+		t.Fatalf("location %v", parsed.Location())
 	}
 }

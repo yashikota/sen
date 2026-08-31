@@ -1,7 +1,9 @@
-import { Link, useLoaderData, useNavigate, useParams } from '@tanstack/react-router';
+import { Link, useLoaderData, useNavigate, useParams, useRouter } from '@tanstack/react-router';
 import { useState } from 'react';
 import { api } from '../api.ts';
+import { IssueDetail } from '../components/IssueDetail.tsx';
 import { IssueList } from '../components/IssueList.tsx';
+import { CYCLE_STATUSES, PROJECT_STATUSES } from '../types.ts';
 import type { Cycle, Issue, Project } from '../types.ts';
 
 export function ProjectsPage() {
@@ -31,6 +33,7 @@ export function ProjectsPage() {
           >
             <input
               className="field"
+              aria-label="New project name"
               placeholder="New project"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -38,7 +41,7 @@ export function ProjectsPage() {
           </form>
         </div>
         {projects.length === 0 ? (
-          <div className="empty">No projects yet.</div>
+          <div className="empty">No projects yet. Name one above.</div>
         ) : (
           <div className="list">
             {projects.map((p) => (
@@ -64,21 +67,117 @@ export function ProjectDetailPage() {
     project: Project;
     issues: Issue[];
   };
-  const [selected, setSelected] = useState<string | null>(null);
+  const router = useRouter();
+  const navigate = useNavigate();
+  const [selected, setSelected] = useState<string | null>(data.issues[0]?.identifier ?? null);
+  const [project, setProject] = useState(data.project);
+
+  if (project.slug !== data.project.slug) {
+    setProject(data.project);
+    setSelected(data.issues[0]?.identifier ?? null);
+  }
+
+  async function save(body: Record<string, unknown>) {
+    const next = await api.patchProject(slug, body);
+    setProject(next);
+    await router.invalidate();
+  }
+
   return (
     <div className="main">
       <section className="pane">
         <div className="pane-head">
-          <h1>{data.project.name}</h1>
-          <span className="badge">{data.project.status}</span>
+          <h1>{project.name}</h1>
+          <select
+            className="field"
+            aria-label="Project status"
+            value={project.status}
+            onChange={(e) => void save({ status: e.target.value })}
+          >
+            {PROJECT_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="ghost"
+            onClick={() =>
+              window.dispatchEvent(
+                new CustomEvent('sen:create-issue', { detail: { projectId: project.id } }),
+              )
+            }
+          >
+            New issue
+          </button>
+          <button
+            type="button"
+            className="ghost danger"
+            onClick={() => {
+              if (!window.confirm(`Delete project ${project.name}?`)) {
+                return;
+              }
+              void api.deleteProject(slug).then(async () => {
+                await router.invalidate();
+                await navigate({ to: '/projects' });
+              });
+            }}
+          >
+            Delete
+          </button>
         </div>
         <div className="detail">
-          <p className="muted">{data.project.description || 'No description'}</p>
-          <IssueList issues={data.issues} selectedId={selected} onSelect={setSelected} />
+          <textarea
+            className="field"
+            aria-label="Project description"
+            placeholder="Description"
+            value={project.description}
+            onChange={(e) => setProject({ ...project, description: e.target.value })}
+            onBlur={() => void save({ description: project.description })}
+          />
+          <div className="props">
+            <label>
+              <span className="muted">Start</span>
+              <input
+                type="date"
+                aria-label="Start date"
+                value={project.startDate?.slice(0, 10) ?? ''}
+                onChange={(e) =>
+                  void save(
+                    e.target.value ? { startDate: e.target.value } : { clearStartDate: true },
+                  )
+                }
+              />
+            </label>
+            <label>
+              <span className="muted">Target</span>
+              <input
+                type="date"
+                aria-label="Target date"
+                value={project.targetDate?.slice(0, 10) ?? ''}
+                onChange={(e) =>
+                  void save(
+                    e.target.value ? { targetDate: e.target.value } : { clearTargetDate: true },
+                  )
+                }
+              />
+            </label>
+          </div>
+          <IssueList
+            issues={data.issues}
+            selectedId={selected}
+            onSelect={setSelected}
+            openOnSelect={false}
+          />
         </div>
       </section>
       <section className="pane">
-        <div className="empty">{slug}</div>
+        {selected ? (
+          <IssueDetail identifier={selected} />
+        ) : (
+          <div className="empty">Select an issue</div>
+        )}
       </section>
     </div>
   );
@@ -115,7 +214,7 @@ export function CyclesPage() {
           </button>
         </div>
         {cycles.length === 0 ? (
-          <div className="empty">No cycles yet.</div>
+          <div className="empty">No cycles yet. Start one to timebox work.</div>
         ) : (
           <div className="list">
             {cycles.map((c) => (
@@ -145,22 +244,72 @@ export function CycleDetailPage() {
     cycle: Cycle;
     issues: Issue[];
   };
-  const [selected, setSelected] = useState<string | null>(null);
+  const router = useRouter();
+  const [selected, setSelected] = useState<string | null>(data.issues[0]?.identifier ?? null);
+  const [cycle, setCycle] = useState(data.cycle);
+  const done = data.issues.filter((i) => i.status === 'done' || i.status === 'canceled').length;
+
+  if (cycle.number !== data.cycle.number) {
+    setCycle(data.cycle);
+    setSelected(data.issues[0]?.identifier ?? null);
+  }
+
+  async function save(body: Record<string, unknown>) {
+    const next = await api.patchCycle(cycle.number, body);
+    setCycle(next);
+    await router.invalidate();
+  }
+
   return (
     <div className="main">
       <section className="pane">
         <div className="pane-head">
-          <h1>Cycle {data.cycle.number}</h1>
-          <span className="badge">{data.cycle.status}</span>
+          <h1>Cycle {cycle.number}</h1>
+          <span className="muted">
+            {done}/{data.issues.length}
+          </span>
+          <select
+            className="field"
+            aria-label="Cycle status"
+            value={cycle.status}
+            onChange={(e) => void save({ status: e.target.value })}
+          >
+            {CYCLE_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="ghost"
+            onClick={() =>
+              window.dispatchEvent(
+                new CustomEvent('sen:create-issue', { detail: { cycleId: cycle.id } }),
+              )
+            }
+          >
+            New issue
+          </button>
         </div>
-        <IssueList issues={data.issues} selectedId={selected} onSelect={setSelected} />
-      </section>
-      <section className="pane">
         <div className="detail">
           <div className="muted">
-            {data.cycle.startsAt} — {data.cycle.endsAt}
+            {cycle.startsAt.slice(0, 10)} — {cycle.endsAt.slice(0, 10)}
           </div>
+          <IssueList
+            issues={data.issues}
+            selectedId={selected}
+            onSelect={setSelected}
+            openOnSelect={false}
+          />
         </div>
+      </section>
+      <section className="pane">
+        {selected ? (
+          <IssueDetail identifier={selected} />
+        ) : (
+          <div className="empty">Select an issue</div>
+        )}
       </section>
     </div>
   );

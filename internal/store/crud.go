@@ -2,6 +2,7 @@ package store
 
 import (
 	"encoding/json"
+	"sort"
 	"strings"
 	"time"
 
@@ -66,7 +67,7 @@ func (s *Store) MarkPushed(digest string) error {
 func (s *Store) HasUserContent() (bool, error) {
 	var n int
 	err := s.snapshot(func(m *mem) error {
-		n = len(m.Issues) + len(m.Projects) + len(m.Cycles) + len(m.Pages)
+		n = len(m.Issues) + len(m.Projects) + len(m.Cycles) + len(m.Pages) + len(m.Views)
 		for _, cs := range m.Comments {
 			n += len(cs)
 		}
@@ -370,11 +371,31 @@ func (s *Store) ListIssues(f IssueFilter) ([]Issue, error) {
 					continue
 				}
 			}
+			if f.Priority != nil && iss.Priority != *f.Priority {
+				continue
+			}
+			if len(f.Labels) > 0 {
+				have := map[string]struct{}{}
+				for _, l := range iss.Labels {
+					have[l.Name] = struct{}{}
+				}
+				ok := true
+				for _, name := range f.Labels {
+					if _, found := have[name]; !found {
+						ok = false
+						break
+					}
+				}
+				if !ok {
+					continue
+				}
+			}
 			out = append(out, iss)
 		}
 		if out == nil {
 			out = []Issue{}
 		}
+		out = sortIssueTree(out)
 		return nil
 	})
 	return out, err
@@ -436,6 +457,18 @@ func (s *Store) CreateIssue(in CreateIssueInput) (Issue, error) {
 				num := c.Number
 				out.CycleNumber = &num
 			}
+		}
+		if in.ParentID != nil {
+			if err := checkIssueParent(m, 0, in.ParentID); err != nil {
+				return err
+			}
+			p, ok := issueByID(m, *in.ParentID)
+			if !ok {
+				return validationf("parent not found")
+			}
+			out.ParentID = in.ParentID
+			ident := p.Identifier
+			out.ParentIdentifier = &ident
 		}
 		for _, id := range in.LabelIDs {
 			if l, ok := labelByID(m, id); ok {
@@ -501,6 +534,19 @@ func (s *Store) UpdateIssue(identifier string, in PatchIssueInput) (Issue, error
 				}
 			}
 		}
+		if in.ParentID != nil {
+			if err := checkIssueParent(m, iss.ID, *in.ParentID); err != nil {
+				return err
+			}
+			iss.ParentID = *in.ParentID
+			iss.ParentIdentifier = nil
+			if iss.ParentID != nil {
+				if p, ok := issueByID(m, *iss.ParentID); ok {
+					ident := p.Identifier
+					iss.ParentIdentifier = &ident
+				}
+			}
+		}
 		if in.DueDate != nil {
 			iss.DueDate = *in.DueDate
 		}
@@ -535,8 +581,15 @@ func (s *Store) DeleteIssue(identifier string) error {
 		if i < 0 {
 			return ErrNotFound
 		}
+		deletedID := m.Issues[i].ID
 		m.Issues = append(m.Issues[:i], m.Issues[i+1:]...)
 		delete(m.Comments, identifier)
+		for j := range m.Issues {
+			if m.Issues[j].ParentID != nil && *m.Issues[j].ParentID == deletedID {
+				m.Issues[j].ParentID = nil
+				m.Issues[j].ParentIdentifier = nil
+			}
+		}
 		m.bump(domain.Now())
 		return nil
 	})
@@ -774,6 +827,233 @@ func checkPageParent(m *mem, pageID int64, parentID *int64) error {
 	return nil
 }
 
+func checkIssueParent(m *mem, issueID int64, parentID *int64) error {
+	if parentID == nil {
+		return nil
+	}
+	if *parentID == issueID && issueID != 0 {
+		return validationf("issue cannot be its own parent")
+	}
+	if _, ok := issueByID(m, *parentID); !ok && issueID != 0 {
+		return validationf("parent not found")
+	}
+	cur := *parentID
+	seen := map[int64]struct{}{issueID: {}}
+	for cur != 0 {
+		if _, ok := seen[cur]; ok {
+			return validationf("issue parent cycle")
+		}
+		seen[cur] = struct{}{}
+		iss, ok := issueByID(m, cur)
+		if !ok {
+			return validationf("parent not found")
+		}
+		if iss.ParentID == nil {
+			return nil
+		}
+		cur = *iss.ParentID
+	}
+	return nil
+}
+
+func sortIssueTree(issues []Issue) []Issue {
+	ids := map[int64]struct{}{}
+	children := map[int64][]Issue{}
+	var roots []Issue
+	for _, iss := range issues {
+		ids[iss.ID] = struct{}{}
+	}
+	for _, iss := range issues {
+		if iss.ParentID != nil {
+			if _, ok := ids[*iss.ParentID]; ok {
+				children[*iss.ParentID] = append(children[*iss.ParentID], iss)
+				continue
+			}
+		}
+		roots = append(roots, iss)
+	}
+	bySort := func(a, b Issue) bool { return a.SortOrder < b.SortOrder }
+	sort.SliceStable(roots, func(i, j int) bool { return bySort(roots[i], roots[j]) })
+	for id, kids := range children {
+		sort.SliceStable(kids, func(i, j int) bool { return bySort(kids[i], kids[j]) })
+		children[id] = kids
+	}
+	out := make([]Issue, 0, len(issues))
+	var walk func(Issue, int)
+	walk = func(iss Issue, depth int) {
+		iss.Depth = depth
+		out = append(out, iss)
+		for _, c := range children[iss.ID] {
+			walk(c, depth+1)
+		}
+	}
+	for _, r := range roots {
+		walk(r, 0)
+	}
+	return out
+}
+
+func (s *Store) ListViews() ([]View, error) {
+	var out []View
+	err := s.snapshot(func(m *mem) error {
+		out = append([]View{}, m.Views...)
+		if out == nil {
+			out = []View{}
+		}
+		return nil
+	})
+	return out, err
+}
+
+func (s *Store) GetView(slug string) (View, error) {
+	var v View
+	err := s.snapshot(func(m *mem) error {
+		got, ok := viewBySlug(m, slug)
+		if !ok {
+			return ErrNotFound
+		}
+		v = got
+		return nil
+	})
+	return v, err
+}
+
+func (s *Store) CreateView(in CreateViewInput) (View, error) {
+	in.Name = strings.TrimSpace(in.Name)
+	in.Slug = strings.TrimSpace(in.Slug)
+	if in.Name == "" {
+		return View{}, validationf("name required")
+	}
+	if !domain.ValidSlug(in.Slug) {
+		return View{}, validationf("invalid slug")
+	}
+	if in.Display == "" {
+		in.Display = "list"
+	}
+	if !domain.ValidViewDisplay(in.Display) {
+		return View{}, validationf("invalid display")
+	}
+	if in.Status != nil && *in.Status != "" && !domain.ValidIssueStatus(*in.Status) {
+		return View{}, validationf("invalid status")
+	}
+	if in.Priority != nil && !domain.ValidPriority(*in.Priority) {
+		return View{}, validationf("invalid priority")
+	}
+	now := domain.Now()
+	var out View
+	err := s.mutate(func(m *mem) error {
+		if _, ok := viewBySlug(m, in.Slug); ok {
+			return errf(ErrConflict, "slug %q exists", in.Slug)
+		}
+		out = View{
+			ID: m.nextID(), Name: in.Name, Slug: in.Slug, Display: in.Display,
+			Status: in.Status, Project: in.Project, Cycle: in.Cycle, Labels: in.Labels,
+			Priority: in.Priority, CreatedAt: now, UpdatedAt: now,
+		}
+		if out.Labels == nil {
+			out.Labels = []string{}
+		}
+		m.Views = append(m.Views, out)
+		m.bump(now)
+		return nil
+	})
+	return out, err
+}
+
+func (s *Store) UpdateView(slug string, in CreateViewInput) (View, error) {
+	var out View
+	err := s.mutate(func(m *mem) error {
+		i := indexView(m, slug)
+		if i < 0 {
+			return ErrNotFound
+		}
+		v := m.Views[i]
+		if name := strings.TrimSpace(in.Name); name != "" {
+			v.Name = name
+		}
+		if in.Display != "" {
+			if !domain.ValidViewDisplay(in.Display) {
+				return validationf("invalid display")
+			}
+			v.Display = in.Display
+		}
+		if in.Status != nil {
+			if *in.Status == "" {
+				v.Status = nil
+			} else {
+				if !domain.ValidIssueStatus(*in.Status) {
+					return validationf("invalid status")
+				}
+				v.Status = in.Status
+			}
+		}
+		if in.Project != nil {
+			if *in.Project == "" {
+				v.Project = nil
+			} else {
+				v.Project = in.Project
+			}
+		}
+		if in.Cycle != nil {
+			if *in.Cycle == 0 {
+				v.Cycle = nil
+			} else {
+				v.Cycle = in.Cycle
+			}
+		}
+		if in.Labels != nil {
+			v.Labels = in.Labels
+		}
+		if in.Priority != nil {
+			if *in.Priority < 0 {
+				v.Priority = nil
+			} else {
+				if !domain.ValidPriority(*in.Priority) {
+					return validationf("invalid priority")
+				}
+				v.Priority = in.Priority
+			}
+		}
+		now := domain.Now()
+		v.UpdatedAt = now
+		m.Views[i] = v
+		m.bump(now)
+		out = v
+		return nil
+	})
+	return out, err
+}
+
+func (s *Store) DeleteView(slug string) error {
+	return s.mutate(func(m *mem) error {
+		i := indexView(m, slug)
+		if i < 0 {
+			return ErrNotFound
+		}
+		m.Views = append(m.Views[:i], m.Views[i+1:]...)
+		m.bump(domain.Now())
+		return nil
+	})
+}
+
+func viewBySlug(m *mem, slug string) (View, bool) {
+	for _, v := range m.Views {
+		if v.Slug == slug {
+			return v, true
+		}
+	}
+	return View{}, false
+}
+
+func indexView(m *mem, slug string) int {
+	for i, v := range m.Views {
+		if v.Slug == slug {
+			return i
+		}
+	}
+	return -1
+}
+
 func (s *Store) Search(q string) ([]SearchHit, error) {
 	q = strings.ToLower(strings.TrimSpace(q))
 	var hits []SearchHit
@@ -790,6 +1070,11 @@ func (s *Store) Search(q string) ([]SearchHit, error) {
 		for _, p := range m.Projects {
 			if strings.Contains(strings.ToLower(p.Name), q) || strings.Contains(strings.ToLower(p.Slug), q) {
 				hits = append(hits, SearchHit{Kind: "project", ID: p.Slug, Title: p.Name})
+			}
+		}
+		for _, v := range m.Views {
+			if strings.Contains(strings.ToLower(v.Name), q) || strings.Contains(strings.ToLower(v.Slug), q) {
+				hits = append(hits, SearchHit{Kind: "view", ID: v.Slug, Title: v.Name})
 			}
 		}
 		for _, p := range m.Pages {
@@ -842,6 +1127,15 @@ func projectProgress(m *mem, id int64) float64 {
 func issueByIdent(m *mem, ident string) (Issue, bool) {
 	for _, iss := range m.Issues {
 		if iss.Identifier == ident {
+			return iss, true
+		}
+	}
+	return Issue{}, false
+}
+
+func issueByID(m *mem, id int64) (Issue, bool) {
+	for _, iss := range m.Issues {
+		if iss.ID == id {
 			return iss, true
 		}
 	}

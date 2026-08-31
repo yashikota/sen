@@ -14,6 +14,7 @@ type issueFM struct {
 	Priority  int         `toml:"priority"`
 	Project   *string     `toml:"project,omitempty"`
 	Cycle     *int        `toml:"cycle,omitempty"`
+	Parent    *string     `toml:"parent,omitempty"`
 	Labels    []string    `toml:"labels"`
 	Due       *string     `toml:"due,omitempty"`
 	Sort      float64     `toml:"sort"`
@@ -88,21 +89,22 @@ func parseIssueMarkdown(ident string, raw string, m *mem) (Issue, []Comment, err
 		fm.Updated = fm.Created
 	}
 	iss := Issue{
-		ID:          int64(n),
-		Number:      n,
-		Identifier:  ident,
-		Title:       fm.Title,
-		Body:        body,
-		Status:      fm.Status,
-		Priority:    fm.Priority,
-		ProjectSlug: fm.Project,
-		CycleNumber: fm.Cycle,
-		DueDate:     fm.Due,
-		SortOrder:   fm.Sort,
-		CreatedAt:   fm.Created,
-		UpdatedAt:   fm.Updated,
-		CompletedAt: fm.Completed,
-		Labels:      []Label{},
+		ID:               int64(n),
+		Number:           n,
+		Identifier:       ident,
+		Title:            fm.Title,
+		Body:             body,
+		Status:           fm.Status,
+		Priority:         fm.Priority,
+		ProjectSlug:      fm.Project,
+		CycleNumber:      fm.Cycle,
+		ParentIdentifier: fm.Parent,
+		DueDate:          fm.Due,
+		SortOrder:        fm.Sort,
+		CreatedAt:        fm.Created,
+		UpdatedAt:        fm.Updated,
+		CompletedAt:      fm.Completed,
+		Labels:           []Label{},
 	}
 	for _, name := range fm.Labels {
 		if l, ok := labelByName(m, name); ok {
@@ -194,6 +196,14 @@ func renderIssueMarkdown(iss Issue, comments []Comment, m *mem) string {
 		}
 	} else if iss.CycleNumber != nil {
 		fm.Cycle = iss.CycleNumber
+	}
+	if iss.ParentID != nil {
+		if p, ok := issueByID(m, *iss.ParentID); ok {
+			ident := p.Identifier
+			fm.Parent = &ident
+		}
+	} else if iss.ParentIdentifier != nil {
+		fm.Parent = iss.ParentIdentifier
 	}
 	for _, l := range iss.Labels {
 		fm.Labels = append(fm.Labels, l.Name)

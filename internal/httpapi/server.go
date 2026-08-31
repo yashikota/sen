@@ -42,6 +42,11 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/cycles", s.createCycle)
 	s.mux.HandleFunc("GET /api/cycles/{number}", s.getCycle)
 	s.mux.HandleFunc("PATCH /api/cycles/{number}", s.patchCycle)
+	s.mux.HandleFunc("GET /api/views", s.listViews)
+	s.mux.HandleFunc("POST /api/views", s.createView)
+	s.mux.HandleFunc("GET /api/views/{slug}", s.getView)
+	s.mux.HandleFunc("PATCH /api/views/{slug}", s.patchView)
+	s.mux.HandleFunc("DELETE /api/views/{slug}", s.deleteView)
 	s.mux.HandleFunc("GET /api/issues", s.listIssues)
 	s.mux.HandleFunc("POST /api/issues", s.createIssue)
 	s.mux.HandleFunc("GET /api/issues/{id}", s.getIssue)
@@ -105,13 +110,25 @@ func decodeJSON(r *http.Request, v any) error {
 	return dec.Decode(v)
 }
 
+func (s *Server) writeWorkspace(w http.ResponseWriter, ws store.Workspace) {
+	dirty, err := s.store.Dirty()
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, struct {
+		store.Workspace
+		Dirty bool `json:"dirty"`
+	}{Workspace: ws, Dirty: dirty})
+}
+
 func (s *Server) getWorkspace(w http.ResponseWriter, _ *http.Request) {
 	ws, err := s.store.Workspace()
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, ws)
+	s.writeWorkspace(w, ws)
 }
 
 func (s *Server) listDiagnostics(w http.ResponseWriter, _ *http.Request) {
@@ -138,7 +155,7 @@ func (s *Server) patchWorkspace(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, ws)
+	s.writeWorkspace(w, ws)
 }
 
 func (s *Server) listLabels(w http.ResponseWriter, _ *http.Request) {
@@ -313,6 +330,80 @@ func (s *Server) patchCycle(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+func viewInput(r *http.Request) (store.CreateViewInput, error) {
+	var in struct {
+		Name     string   `json:"name"`
+		Slug     string   `json:"slug"`
+		Display  string   `json:"display"`
+		Status   *string  `json:"status"`
+		Project  *string  `json:"project"`
+		Cycle    *int     `json:"cycle"`
+		Labels   []string `json:"labels"`
+		Priority *int     `json:"priority"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		return store.CreateViewInput{}, err
+	}
+	return store.CreateViewInput{
+		Name: in.Name, Slug: in.Slug, Display: in.Display, Status: in.Status,
+		Project: in.Project, Cycle: in.Cycle, Labels: in.Labels, Priority: in.Priority,
+	}, nil
+}
+
+func (s *Server) listViews(w http.ResponseWriter, _ *http.Request) {
+	out, err := s.store.ListViews()
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) createView(w http.ResponseWriter, r *http.Request) {
+	in, err := viewInput(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		return
+	}
+	out, err := s.store.CreateView(in)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, out)
+}
+
+func (s *Server) getView(w http.ResponseWriter, r *http.Request) {
+	out, err := s.store.GetView(r.PathValue("slug"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) patchView(w http.ResponseWriter, r *http.Request) {
+	in, err := viewInput(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		return
+	}
+	out, err := s.store.UpdateView(r.PathValue("slug"), in)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) deleteView(w http.ResponseWriter, r *http.Request) {
+	if err := s.store.DeleteView(r.PathValue("slug")); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *Server) listIssues(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	f := store.IssueFilter{Status: q.Get("status"), ProjectSlug: q.Get("project")}
@@ -323,6 +414,22 @@ func (s *Server) listIssues(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		f.CycleNumber = n
+	}
+	if p := q.Get("priority"); p != "" {
+		n, err := strconv.Atoi(p)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid priority"})
+			return
+		}
+		f.Priority = &n
+	}
+	if labels := q.Get("labels"); labels != "" {
+		for _, name := range strings.Split(labels, ",") {
+			name = strings.TrimSpace(name)
+			if name != "" {
+				f.Labels = append(f.Labels, name)
+			}
+		}
 	}
 	out, err := s.store.ListIssues(f)
 	if err != nil {
@@ -340,6 +447,7 @@ func (s *Server) createIssue(w http.ResponseWriter, r *http.Request) {
 		Priority  int     `json:"priority"`
 		ProjectID *int64  `json:"projectId"`
 		CycleID   *int64  `json:"cycleId"`
+		ParentID  *int64  `json:"parentId"`
 		DueDate   *string `json:"dueDate"`
 		LabelIDs  []int64 `json:"labelIds"`
 	}
@@ -349,7 +457,7 @@ func (s *Server) createIssue(w http.ResponseWriter, r *http.Request) {
 	}
 	out, err := s.store.CreateIssue(store.CreateIssueInput{
 		Title: in.Title, Body: in.Body, Status: in.Status, Priority: in.Priority,
-		ProjectID: in.ProjectID, CycleID: in.CycleID, DueDate: in.DueDate, LabelIDs: in.LabelIDs,
+		ProjectID: in.ProjectID, CycleID: in.CycleID, ParentID: in.ParentID, DueDate: in.DueDate, LabelIDs: in.LabelIDs,
 	})
 	if err != nil {
 		writeError(w, err)
@@ -421,6 +529,14 @@ func (s *Server) patchIssue(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		in.CycleID = &id
+	}
+	if v, ok := raw["parentId"]; ok {
+		id, err := unmarshalOptInt64(v)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid parentId"})
+			return
+		}
+		in.ParentID = &id
 	}
 	if v, ok := raw["dueDate"]; ok {
 		d, err := unmarshalOptString(v)
@@ -629,9 +745,10 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) commands(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, []map[string]string{
+	cmds := []map[string]string{
 		{"id": "new-issue", "title": "Create issue", "hint": "c"},
 		{"id": "new-page", "title": "Create page", "hint": "p"},
+		{"id": "new-view", "title": "Create view", "hint": ""},
 		{"id": "goto-issues", "title": "Go to Issues", "hint": ""},
 		{"id": "goto-board", "title": "Go to Board", "hint": ""},
 		{"id": "goto-projects", "title": "Go to Projects", "hint": ""},
@@ -642,7 +759,23 @@ func (s *Server) commands(w http.ResponseWriter, _ *http.Request) {
 		{"id": "set-status-in_progress", "title": "Set status: In Progress", "hint": "s"},
 		{"id": "set-status-done", "title": "Set status: Done", "hint": "s"},
 		{"id": "set-status-canceled", "title": "Set status: Canceled", "hint": "s"},
-	})
+	}
+	cycles, err := s.store.ListCycles()
+	if err == nil {
+		for _, c := range cycles {
+			cmds = append(cmds, map[string]string{
+				"id":    "assign-cycle:" + strconv.FormatInt(c.ID, 10),
+				"title": "Assign to Cycle " + strconv.Itoa(c.Number),
+				"hint":  "",
+			})
+		}
+		cmds = append(cmds, map[string]string{
+			"id":    "assign-cycle:none",
+			"title": "Remove from cycle",
+			"hint":  "",
+		})
+	}
+	writeJSON(w, http.StatusOK, cmds)
 }
 
 func unmarshalOptInt64(raw json.RawMessage) (*int64, error) {

@@ -77,6 +77,31 @@ func diagnose(m *mem) {
 		m.diag("cycles", "multiple_active", fmt.Sprintf("%d cycles are active", active))
 	}
 
+	seenView := map[string]struct{}{}
+	for _, v := range m.Views {
+		path := "views/" + v.Slug + ".toml"
+		if _, ok := seenView[v.Slug]; ok {
+			m.diag(path, "duplicate_slug", fmt.Sprintf("duplicate view slug %q", v.Slug))
+		} else {
+			seenView[v.Slug] = struct{}{}
+		}
+		if !domain.ValidSlug(v.Slug) {
+			m.diag(path, "invalid_slug", fmt.Sprintf("invalid slug %q", v.Slug))
+		}
+		if v.Name == "" {
+			m.diag(path, "missing_name", "name is empty")
+		}
+		if !domain.ValidViewDisplay(v.Display) {
+			m.diag(path, "invalid_display", fmt.Sprintf("invalid display %q", v.Display))
+		}
+		if v.Status != nil && *v.Status != "" && !domain.ValidIssueStatus(*v.Status) {
+			m.diag(path, "invalid_status", fmt.Sprintf("invalid status %q", *v.Status))
+		}
+		if v.Priority != nil && !domain.ValidPriority(*v.Priority) {
+			m.diag(path, "invalid_priority", fmt.Sprintf("invalid priority %d", *v.Priority))
+		}
+	}
+
 	for _, iss := range m.Issues {
 		path := "issues/" + iss.Identifier + ".md"
 		if !domain.ValidIssueStatus(iss.Status) {
@@ -90,6 +115,12 @@ func diagnose(m *mem) {
 		}
 		if iss.CycleNumber != nil && iss.CycleID == nil {
 			m.diag(path, "dangling_cycle", fmt.Sprintf("unknown cycle %d", *iss.CycleNumber))
+		}
+		if iss.ParentIdentifier != nil && iss.ParentID == nil {
+			m.diag(path, "dangling_parent", fmt.Sprintf("unknown parent %q", *iss.ParentIdentifier))
+		}
+		if err := checkIssueParent(m, iss.ID, iss.ParentID); err != nil {
+			m.diag(path, "parent_cycle", err.Error())
 		}
 		for _, l := range iss.Labels {
 			if _, ok := labelByName(m, l.Name); !ok {

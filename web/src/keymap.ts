@@ -10,7 +10,9 @@ export type KeyAction =
   | 'priority-1'
   | 'priority-2'
   | 'priority-3'
-  | 'priority-4';
+  | 'priority-4'
+  | 'help'
+  | 'find';
 
 const TYPING_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT']);
 
@@ -66,6 +68,10 @@ export function actionFromKeyboard(event: {
       return 'priority-3';
     case '4':
       return 'priority-4';
+    case '?':
+      return 'help';
+    case '/':
+      return 'find';
     default:
       return null;
   }

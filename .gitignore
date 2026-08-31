@@ -9,6 +9,10 @@ web.log
 .smoke
 web/node_modules
 web/dist
+web/test-results
+web/playwright-report
+web/blob-report
+web/playwright/.cache
 dist
 !internal/webembed/dist/
 internal/webembed/dist/**

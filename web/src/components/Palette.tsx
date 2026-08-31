@@ -18,9 +18,16 @@ export function Palette({ query, onQuery, commands, onPick, onClose }: Props) {
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="palette" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="palette"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Command palette"
+        onClick={(e) => e.stopPropagation()}
+      >
         <input
           autoFocus
+          aria-label="Command search"
           placeholder="Type a command or search…"
           value={query}
           onChange={(e) => onQuery(e.target.value)}
@@ -40,13 +47,19 @@ export function Palette({ query, onQuery, commands, onPick, onClose }: Props) {
                 onPick(id);
               }
             }
+            if (e.key === 'Escape') {
+              e.preventDefault();
+              onClose();
+            }
           }}
         />
-        <div className="palette-list">
+        <div className="palette-list" role="listbox">
           {commands.map((c, i) => (
             <button
               type="button"
               key={c.id + i}
+              role="option"
+              aria-selected={i === active}
               className={`palette-item ${i === active ? 'active' : ''}`}
               onMouseEnter={() => setActive(i)}
               onClick={() => onPick(c.id)}

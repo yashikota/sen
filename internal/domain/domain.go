@@ -60,6 +60,10 @@ func ValidPageStatus(s string) bool {
 	}
 }
 
+func ValidViewDisplay(s string) bool {
+	return s == "list" || s == "board"
+}
+
 func ValidSlug(s string) bool {
 	if s == "" {
 		return false

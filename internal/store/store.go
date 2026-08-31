@@ -59,23 +59,26 @@ type Cycle struct {
 }
 
 type Issue struct {
-	ID          int64   `json:"id"`
-	Number      int     `json:"number"`
-	Identifier  string  `json:"identifier"`
-	Title       string  `json:"title"`
-	Body        string  `json:"body"`
-	Status      string  `json:"status"`
-	Priority    int     `json:"priority"`
-	ProjectID   *int64  `json:"projectId"`
-	ProjectSlug *string `json:"projectSlug,omitempty"`
-	CycleID     *int64  `json:"cycleId"`
-	CycleNumber *int    `json:"cycleNumber,omitempty"`
-	DueDate     *string `json:"dueDate"`
-	SortOrder   float64 `json:"sortOrder"`
-	Labels      []Label `json:"labels"`
-	CreatedAt   string  `json:"createdAt"`
-	UpdatedAt   string  `json:"updatedAt"`
-	CompletedAt *string `json:"completedAt"`
+	ID               int64   `json:"id"`
+	Number           int     `json:"number"`
+	Identifier       string  `json:"identifier"`
+	Title            string  `json:"title"`
+	Body             string  `json:"body"`
+	Status           string  `json:"status"`
+	Priority         int     `json:"priority"`
+	ProjectID        *int64  `json:"projectId"`
+	ProjectSlug      *string `json:"projectSlug,omitempty"`
+	CycleID          *int64  `json:"cycleId"`
+	CycleNumber      *int    `json:"cycleNumber,omitempty"`
+	ParentID         *int64  `json:"parentId"`
+	ParentIdentifier *string `json:"parentIdentifier,omitempty"`
+	Depth            int     `json:"depth"`
+	DueDate          *string `json:"dueDate"`
+	SortOrder        float64 `json:"sortOrder"`
+	Labels           []Label `json:"labels"`
+	CreatedAt        string  `json:"createdAt"`
+	UpdatedAt        string  `json:"updatedAt"`
+	CompletedAt      *string `json:"completedAt"`
 }
 
 type Comment struct {
@@ -110,6 +113,34 @@ type Page struct {
 	UpdatedAt   string   `json:"updatedAt"`
 }
 
+type View struct {
+	ID        int64    `json:"id" toml:"id"`
+	Name      string   `json:"name" toml:"name"`
+	Slug      string   `json:"slug" toml:"slug"`
+	Display   string   `json:"display" toml:"display"`
+	Status    *string  `json:"status" toml:"status,omitempty"`
+	Project   *string  `json:"project" toml:"project,omitempty"`
+	Cycle     *int     `json:"cycle" toml:"cycle,omitempty"`
+	Labels    []string `json:"labels" toml:"labels,omitempty"`
+	Priority  *int     `json:"priority" toml:"priority,omitempty"`
+	CreatedAt string   `json:"createdAt" toml:"createdAt"`
+	UpdatedAt string   `json:"updatedAt" toml:"updatedAt"`
+}
+
+func (v View) Filter() IssueFilter {
+	f := IssueFilter{Labels: v.Labels, Priority: v.Priority}
+	if v.Status != nil {
+		f.Status = *v.Status
+	}
+	if v.Project != nil {
+		f.ProjectSlug = *v.Project
+	}
+	if v.Cycle != nil {
+		f.CycleNumber = *v.Cycle
+	}
+	return f
+}
+
 type Diagnostic struct {
 	Path    string `json:"path"`
 	Code    string `json:"code"`
@@ -126,6 +157,8 @@ type IssueFilter struct {
 	Status      string
 	ProjectSlug string
 	CycleNumber int
+	Labels      []string
+	Priority    *int
 }
 
 type CreateIssueInput struct {
@@ -135,6 +168,7 @@ type CreateIssueInput struct {
 	Priority  int
 	ProjectID *int64
 	CycleID   *int64
+	ParentID  *int64
 	DueDate   *string
 	LabelIDs  []int64
 }
@@ -146,9 +180,21 @@ type PatchIssueInput struct {
 	Priority  *int
 	ProjectID **int64
 	CycleID   **int64
+	ParentID  **int64
 	DueDate   **string
 	LabelIDs  *[]int64
 	SortOrder *float64
+}
+
+type CreateViewInput struct {
+	Name     string
+	Slug     string
+	Display  string
+	Status   *string
+	Project  *string
+	Cycle    *int
+	Labels   []string
+	Priority *int
 }
 
 type mem struct {
@@ -156,6 +202,7 @@ type mem struct {
 	Labels      []Label
 	Projects    []Project
 	Cycles      []Cycle
+	Views       []View
 	Issues      []Issue
 	Comments    map[string][]Comment
 	Pages       []Page

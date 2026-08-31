@@ -18,6 +18,9 @@ export type Issue = {
   projectSlug?: string | null;
   cycleId: number | null;
   cycleNumber?: number | null;
+  parentId: number | null;
+  parentIdentifier?: string | null;
+  depth: number;
   dueDate: string | null;
   sortOrder: number;
   labels: Label[];
@@ -55,12 +58,34 @@ export type Page = {
   slug: string;
   body: string;
   parentId: number | null;
+  parentSlug?: string | null;
   projectId: number | null;
+  projectSlug?: string | null;
   status: string;
   date: string | null;
   tags: string[];
   createdAt: string;
   updatedAt: string;
+};
+
+export type View = {
+  id: number;
+  name: string;
+  slug: string;
+  display: 'list' | 'board';
+  status: string | null;
+  project: string | null;
+  cycle: number | null;
+  labels: string[];
+  priority: number | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Diagnostic = {
+  path: string;
+  code: string;
+  message: string;
 };
 
 export type Comment = {
@@ -86,6 +111,7 @@ export type Workspace = {
   lastPushedAt: string | null;
   lastPushedDigest: string | null;
   updatedAt: string;
+  dirty: boolean;
 };
 
 export type SearchHit = {
@@ -105,3 +131,9 @@ export const STATUS_LABEL: Record<IssueStatus, string> = {
 };
 
 export const PRIORITY_LABEL = ['No priority', 'Urgent', 'High', 'Medium', 'Low'];
+
+export const PROJECT_STATUSES = ['planned', 'started', 'completed', 'canceled'] as const;
+
+export const CYCLE_STATUSES = ['upcoming', 'active', 'completed'] as const;
+
+export const PAGE_STATUSES = ['proposed', 'accepted', 'deprecated', 'superseded'] as const;
